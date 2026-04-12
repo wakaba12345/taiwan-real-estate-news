@@ -419,14 +419,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// 後台手動觸發
-export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get("authorization") ?? "";
-  const adminSecret = process.env.ADMIN_SECRET ?? process.env.CRON_SECRET ?? "";
-  if (adminSecret && authHeader !== `Bearer ${adminSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+// 後台手動觸發（不需要 token，由後台 UI 呼叫）
+export async function POST(_req: NextRequest) {
   try {
     const result = await runFetchNews();
     return NextResponse.json({ ok: true, ...result });
