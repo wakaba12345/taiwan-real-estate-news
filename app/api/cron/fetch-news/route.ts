@@ -54,18 +54,28 @@ interface RssItem {
 async function fetchRss(): Promise<RssItem[]> {
   const res = await fetch(RSS_URL, { headers: GNEWS_HEADERS });
   const xml = await res.text();
-  const root = parseHtml(xml);
-  const items = root.querySelectorAll("item");
 
-  return items.map((item) => ({
-    title: item.querySelector("title")?.text?.replace(/<!\[CDATA\[|\]\]>/g, "").trim() ?? "",
-    link: item.querySelector("link")?.text?.trim() ?? "",
-    pubDate: item.querySelector("pubDate")?.text?.trim() ?? "",
-    source:
-      item.querySelector("source")?.text?.replace(/<!\[CDATA\[|\]\]>/g, "").trim() ??
-      item.querySelector("source")?.getAttribute("url") ??
-      "",
-  }));
+  // node-html-parser 把 <link> 當 HTML void element，.text 永遠空白
+  // 改用 regex 直接切割 <item>...</item> 區塊再解析
+  const itemBlocks = xml.match(/<item>([\s\S]*?)<\/item>/g) ?? [];
+
+  return itemBlocks.map((block) => {
+    const get = (tag: string) =>
+      block.match(new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`))?.[1]?.trim() ??
+      block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`))?.[1]?.trim() ?? "";
+
+    const link = get("link");
+    const sourceUrl = block.match(/source url="([^"]+)"/)?.[1] ?? "";
+    const source =
+      block.match(/<source[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/source>/)?.[1]?.trim() ?? sourceUrl;
+
+    return {
+      title: get("title"),
+      link,
+      pubDate: get("pubDate"),
+      source,
+    };
+  }).filter((it) => it.link.startsWith("http"));
 }
 
 function isBlocked(url: string): boolean {
