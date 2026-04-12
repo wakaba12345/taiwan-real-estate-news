@@ -314,32 +314,34 @@ async function runFetchNews() {
   const today = new Date().toISOString().slice(0, 10);
   const skipUrls = await getSkipUrls(today);
   const domain = process.env.NEXT_PUBLIC_DOMAIN ?? "localhost:3000";
+  const debugLog: string[] = [];
+  const log = (msg: string) => { console.log(msg); debugLog.push(msg); };
 
   // 1. 抓 RSS
   const allItems = await fetchRss();
-  console.log(`[fetch-news] RSS: ${allItems.length} 篇`);
+  log(`RSS: ${allItems.length} 篇`);
 
   // 2. 過濾聚合器
   const filtered = allItems.filter((it) => !isBlocked(it.link));
-  console.log(`[fetch-news] 過濾後: ${filtered.length} 篇`);
+  log(`過濾後: ${filtered.length} 篇`);
 
   // 3. 去重
   const deduped = filtered.filter((it) => !skipUrls.has(it.link));
-  console.log(`[fetch-news] 去重後: ${deduped.length} 篇`);
+  log(`去重後: ${deduped.length} 篇`);
 
   if (deduped.length === 0) {
     await writeFetchLog("success", 0, "無新文章");
-    return { saved: 0, articles: [] };
+    return { saved: 0, articles: [], debug: debugLog };
   }
 
   // 4. AI 篩選
   const topIndexes = await filterNews(deduped.slice(0, 30));
-  console.log(`[fetch-news] AI 篩選索引: ${JSON.stringify(topIndexes)}`);
+  log(`AI篩選索引: ${JSON.stringify(topIndexes)}`);
   const topItems = topIndexes
     .map((i) => deduped[i])
     .filter(Boolean)
     .slice(0, 5);
-  console.log(`[fetch-news] 選出: ${topItems.length} 篇`, topItems.map(t => t.title.slice(0, 30)));
+  log(`選出: ${topItems.length} 篇 [${topItems.map(t => t.title.slice(0, 20)).join(" | ")}]`);
 
   // 5. 翻譯標題（批量）
   const translations = await translateTitles(topItems);
@@ -351,17 +353,17 @@ async function runFetchNews() {
     try {
       // resolveUrl
       const realUrl = await resolveUrl(item.link);
-      console.log(`[fetch-news] resolveUrl: ${realUrl.slice(0, 80)}`);
-      if (skipUrls.has(realUrl)) { console.log("[fetch-news] 跳過(已抓)"); continue; }
+      log(`resolveUrl: ${realUrl.slice(0, 80)}`);
+      if (skipUrls.has(realUrl)) { log("跳過(已抓)"); continue; }
 
       // 爬取內文
       const articleText = await fetchArticleText(realUrl);
-      console.log(`[fetch-news] 內文長度: ${articleText.length}`);
-      if (articleText.length < 100) { console.log("[fetch-news] 跳過(內文太短)"); continue; }
+      log(`內文長度: ${articleText.length}`);
+      if (articleText.length < 100) { log("跳過(內文太短)"); continue; }
 
       // AI 改寫
       const result = await translateArticle(item.title, realUrl, articleText);
-      console.log(`[fetch-news] AI改寫: ${result ? result.title.slice(0, 30) : "失敗"}`);
+      log(`AI改寫: ${result ? result.title.slice(0, 30) : "失敗(null)"}`);
       if (!result) continue;
 
       const pubDate = today;
@@ -393,8 +395,9 @@ async function runFetchNews() {
     await sendSummaryEmail(settings.alertEmail, saved, domain);
   }
 
+  log(`完成，儲存 ${saved.length} 篇`);
   await writeFetchLog("success", saved.length, `已儲存 ${saved.length} 篇`);
-  return { saved: saved.length, articles: saved };
+  return { saved: saved.length, articles: saved, debug: debugLog };
 }
 
 // ─── Route handlers ───────────────────────────────────────────────────────────
