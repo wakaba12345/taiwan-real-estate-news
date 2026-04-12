@@ -12,8 +12,9 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@neondatabase/serverless": "^0.10.4",
     "autoprefixer": "^10.4.27",
-    "next": "15.2.4",
+    "next": "^15.3.2",
     "node-html-parser": "^6.1.13",
+    "prettier": "^3.8.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "resend": "^4.5.1"
