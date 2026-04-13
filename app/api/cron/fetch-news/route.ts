@@ -22,6 +22,16 @@ import { getPrompts } from "@/lib/get-prompts";
 
 // ─── 設定 ────────────────────────────────────────────────────────────────────
 
+// Yahoo 專屬 RSS（只抓 Yahoo 新聞 / Yahoo 股市的房地產文章）
+const YAHOO_RSS_URLS = [
+  "https://news.google.com/rss/search?q=site:tw.news.yahoo.com+%E6%88%BF%E5%9C%B0%E7%94%A2&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  "https://news.google.com/rss/search?q=site:tw.news.yahoo.com+%E6%88%BF%E5%83%B7&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  "https://news.google.com/rss/search?q=site:tw.news.yahoo.com+%E8%B3%BC%E5%B1%8B+OR+%E9%A0%90%E5%94%AE%E5%B1%8B&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  "https://news.google.com/rss/search?q=site:tw.stock.yahoo.com+%E6%88%BF%E5%9C%B0%E7%94%A2&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  "https://news.google.com/rss/search?q=site:tw.stock.yahoo.com+%E6%88%BF%E5%83%B7&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  "https://news.google.com/rss/search?q=site:tw.stock.yahoo.com+%E8%B3%BC%E5%B1%8B+OR+%E9%A0%90%E5%94%AE%E5%B1%8B&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+];
+
 // 多個關鍵字 RSS 來源：涵蓋房地產各面向
 const RSS_URLS = [
   // 房地產 / 房市
@@ -109,9 +119,9 @@ function parseRssXml(xml: string): RssItem[] {
   }).filter((it) => it.link.startsWith("http"));
 }
 
-async function fetchRss(): Promise<RssItem[]> {
+async function fetchRss(urls: string[] = RSS_URLS): Promise<RssItem[]> {
   const results = await Promise.allSettled(
-    RSS_URLS.map((url) =>
+    urls.map((url) =>
       fetch(url, { headers: GNEWS_HEADERS }).then((r) => r.text()).then(parseRssXml)
     )
   );
@@ -482,7 +492,7 @@ async function sendAlertEmail(to: string, error: string, domain: string) {
 
 // ─── 主要邏輯 ─────────────────────────────────────────────────────────────────
 
-async function runFetchNews(limit = MAX_PER_RUN) {
+async function runFetchNews(limit = MAX_PER_RUN, yahooOnly = false) {
   await initNewsDb();
   await initTables();
 
@@ -494,7 +504,9 @@ async function runFetchNews(limit = MAX_PER_RUN) {
   const log = (msg: string) => { console.log(msg); debugLog.push(msg); };
 
   // 1. 抓 RSS
-  const allItems = await fetchRss();
+  const rssUrls = yahooOnly ? YAHOO_RSS_URLS : RSS_URLS;
+  log(yahooOnly ? "模式：只抓 Yahoo 新聞 / Yahoo 股市" : "模式：全來源");
+  const allItems = await fetchRss(rssUrls);
   log(`RSS: ${allItems.length} 篇`);
 
   // 2. 過濾聚合器
@@ -623,7 +635,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const limit = typeof body.limit === "number" ? body.limit : MAX_PER_RUN;
-    const result = await runFetchNews(limit);
+    const yahooOnly = body.yahoo_only === true;
+    const result = await runFetchNews(limit, yahooOnly);
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

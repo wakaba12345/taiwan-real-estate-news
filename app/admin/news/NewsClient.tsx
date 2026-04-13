@@ -32,15 +32,18 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
   const [msg, setMsg] = useState("");
   const [debugLog, setDebugLog] = useState<string[]>([]);
 
-  async function triggerFetch(limit?: number) {
+  async function triggerFetch(limit?: number, yahooOnly?: boolean) {
     setTriggering(true);
-    setMsg("正在抓取新聞，請稍候...");
+    setMsg(yahooOnly ? "正在抓取 Yahoo 新聞，請稍候..." : "正在抓取新聞，請稍候...");
     setDebugLog([]);
     try {
       const res = await fetch("/api/cron/fetch-news", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(limit ? { limit } : {}),
+        body: JSON.stringify({
+          ...(limit ? { limit } : {}),
+          ...(yahooOnly ? { yahoo_only: true } : {}),
+        }),
       });
       const text = await res.text();
       let data: Record<string, unknown>;
@@ -86,6 +89,13 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
           className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
           {triggering ? "抓取中..." : "立即抓取新聞"}
+        </button>
+        <button
+          onClick={() => triggerFetch(undefined, true)}
+          disabled={triggering}
+          className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 disabled:opacity-50 text-sm font-medium"
+        >
+          {triggering ? "抓取中..." : "只抓 Yahoo 新聞"}
         </button>
         <button
           onClick={() => triggerFetch(3)}
