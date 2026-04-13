@@ -384,22 +384,13 @@ async function runFetchNews() {
     return { saved: 0, articles: [], debug: debugLog };
   }
 
-  // 4. AI 篩選
-  const topIndexes = await filterNews(deduped.slice(0, 30));
-  log(`AI篩選索引: ${JSON.stringify(topIndexes)}`);
-  const topItems = topIndexes
-    .map((i) => deduped[i])
-    .filter(Boolean)
-    .slice(0, 5);
-  log(`選出: ${topItems.length} 篇 [${topItems.map(t => t.title.slice(0, 20)).join(" | ")}]`);
+  // 4. 全部處理（不 AI 篩選）
+  log(`準備處理 ${deduped.length} 篇`);
 
-  // 5. 翻譯標題（批量）
-  const translations = await translateTitles(topItems);
-
-  // 6. 逐篇處理
+  // 5. 逐篇處理
   const saved: { title: string; slug: string }[] = [];
 
-  for (const item of topItems) {
+  for (const item of deduped) {
     try {
       // resolveUrl
       const realUrl = await resolveUrl(item.link);
