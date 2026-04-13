@@ -50,12 +50,20 @@ const GNEWS_HEADERS: Record<string, string> = {
 };
 
 const BLOCKED = [
-  "udn.com",                  // 聯合報 / 經濟日報（含 house.udn.com / money.udn.com）
+  "udn.com",                  // 聯合報 / 經濟日報
   "ctee.com.tw",              // 工商時報（反爬蟲封鎖）
-  "twhg.com.tw",              // 台灣好省（JS 渲染，永遠 33 字）
-  "farglory-realty.com.tw",   // 遠雄房地產（JS 渲染，永遠 44 字）
-  "businessweekly.com.tw",    // 商業周刊（JS 渲染，永遠 28 字）
-  "cw.com.tw",                // 天下雜誌（JS 渲染，0 字）
+  "twhg.com.tw",              // 台灣好省（JS 渲染）
+  "farglory-realty.com.tw",   // 遠雄房地產（JS 渲染）
+  "businessweekly.com.tw",    // 商業周刊（JS 渲染）
+  "cw.com.tw",                // 天下雜誌（JS 渲染）
+  "ltn.com.tw",               // 自由時報（JS 渲染）
+  "setn.com",                 // 三立新聞（JS 渲染）
+  "storm.mg",                 // 風傳媒（JS 渲染）
+  "ftvnews.com.tw",           // 民視新聞（JS 渲染）
+  "housefun.com.tw",          // 好房網（JS 渲染）
+  "myhousing.com.tw",         // 住展雜誌（JS 渲染）
+  "sinyi.com.tw",             // 信義房屋（JS 渲染）
+  "591.com.tw",               // 591（JS 渲染）
   "yam.com",
   "kimo.com",
   "msn.com",
