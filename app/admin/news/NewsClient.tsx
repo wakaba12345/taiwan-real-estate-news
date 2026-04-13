@@ -29,6 +29,7 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
   const [logs, setLogs] = useState(initialLogs);
   const [triggering, setTriggering] = useState(false);
   const [msg, setMsg] = useState("");
+  const [debugLog, setDebugLog] = useState<string[]>([]);
 
   async function triggerFetch() {
     setTriggering(true);
@@ -36,9 +37,9 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
     try {
       const res = await fetch("/api/cron/fetch-news", { method: "POST" });
       const data = await res.json();
+      if (data.debug) setDebugLog(data.debug);
       if (data.ok) {
         setMsg(`✅ 完成！已儲存 ${data.saved} 篇新聞`);
-        // 重新載入文章列表
         const r = await fetch("/api/admin/news");
         setArticles(await r.json());
         const s = await fetch("/api/admin/news-settings");
@@ -73,6 +74,16 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
         </button>
         {msg && <span className="text-sm text-gray-600">{msg}</span>}
       </div>
+
+      {/* Debug Log */}
+      {debugLog.length > 0 && (
+        <div className="mb-8 bg-gray-900 text-green-400 rounded-lg p-4 text-xs font-mono">
+          <div className="text-gray-400 mb-2">── Debug Log ──</div>
+          {debugLog.map((line, i) => (
+            <div key={i}>{line}</div>
+          ))}
+        </div>
+      )}
 
       {/* 文章列表 */}
       <div className="mb-10">
