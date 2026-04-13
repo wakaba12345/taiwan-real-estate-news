@@ -549,12 +549,12 @@ async function runFetchNews(limit = MAX_PER_RUN) {
     }
   }
 
-  // 7. 寄 email（失敗不影響主流程）
-  if (saved.length > 0 && settings.alertEmail) {
-    try { await sendSummaryEmail(settings.alertEmail, saved, domain); } catch (e) {
-      log(`Email 寄送失敗（不影響結果）：${e}`);
-    }
-  }
+  // 7. 寄 email（暫時停用）
+  // if (saved.length > 0 && settings.alertEmail) {
+  //   try { await sendSummaryEmail(settings.alertEmail, saved, domain); } catch (e) {
+  //     log(`Email 寄送失敗（不影響結果）：${e}`);
+  //   }
+  // }
 
   log(`完成，儲存 ${saved.length} 篇`);
   await writeFetchLog("success", saved.length, `已儲存 ${saved.length} 篇`);
