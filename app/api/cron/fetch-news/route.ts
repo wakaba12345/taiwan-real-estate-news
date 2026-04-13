@@ -469,7 +469,7 @@ async function sendAlertEmail(to: string, error: string, domain: string) {
 
 // ─── 主要邏輯 ─────────────────────────────────────────────────────────────────
 
-async function runFetchNews() {
+async function runFetchNews(limit = MAX_PER_RUN) {
   await initNewsDb();
   await initTables();
 
@@ -498,7 +498,7 @@ async function runFetchNews() {
   }
 
   // 4. 限制每次處理篇數，避免 504
-  const toProcess = deduped.slice(0, MAX_PER_RUN);
+  const toProcess = deduped.slice(0, limit);
   log(`準備處理 ${toProcess.length} 篇（共 ${deduped.length} 篇待處理，每次上限 ${MAX_PER_RUN}）`);
 
   // 5. 逐篇處理
@@ -600,9 +600,11 @@ export async function GET(req: NextRequest) {
 }
 
 // 後台手動觸發（不需要 token，由後台 UI 呼叫）
-export async function POST(_req: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const result = await runFetchNews();
+    const body = await req.json().catch(() => ({}));
+    const limit = typeof body.limit === "number" ? body.limit : MAX_PER_RUN;
+    const result = await runFetchNews(limit);
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -32,12 +32,16 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
   const [msg, setMsg] = useState("");
   const [debugLog, setDebugLog] = useState<string[]>([]);
 
-  async function triggerFetch() {
+  async function triggerFetch(limit?: number) {
     setTriggering(true);
     setMsg("正在抓取新聞，請稍候...");
     setDebugLog([]);
     try {
-      const res = await fetch("/api/cron/fetch-news", { method: "POST" });
+      const res = await fetch("/api/cron/fetch-news", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(limit ? { limit } : {}),
+      });
       const text = await res.text();
       let data: Record<string, unknown>;
       try {
@@ -75,13 +79,20 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
   return (
     <div>
       {/* 手動觸發 */}
-      <div className="mb-8 flex items-center gap-4">
+      <div className="mb-8 flex items-center gap-3 flex-wrap">
         <button
-          onClick={triggerFetch}
+          onClick={() => triggerFetch()}
           disabled={triggering}
           className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
           {triggering ? "抓取中..." : "立即抓取新聞"}
+        </button>
+        <button
+          onClick={() => triggerFetch(3)}
+          disabled={triggering}
+          className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50 text-sm"
+        >
+          {triggering ? "抓取中..." : "測試抓取 3 篇"}
         </button>
         {msg && <span className="text-sm text-gray-600">{msg}</span>}
       </div>
