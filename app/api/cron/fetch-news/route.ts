@@ -89,76 +89,92 @@ function isBlocked(url: string): boolean {
 
 // ─── Google News URL 解碼 (三段 fallback) ────────────────────────────────────
 
-async function resolveUrl(gnewsUrl: string): Promise<string> {
-  // Method 1: batchexecute API
+async function resolveUrl(gnewsUrl: string): Promise<string | null> {
   try {
-    const pageRes = await fetch(gnewsUrl, {
-      headers: GNEWS_HEADERS,
-      redirect: "follow",
-    });
-    const html = await pageRes.text();
-    const root = parseHtml(html);
+    const base64 = new URL(gnewsUrl).pathname.split("/").pop();
+    if (!base64) return null;
 
-    const sgEl = root.querySelector("[data-n-a-sg]");
-    const tsEl = root.querySelector("[data-n-a-ts]");
+    const articleUrl = `https://news.google.com/articles/${base64}`;
 
-    if (sgEl && tsEl) {
-      const sg = sgEl.getAttribute("data-n-a-sg");
-      const ts = tsEl.getAttribute("data-n-a-ts");
-      const articleId = gnewsUrl.split("/").pop()?.split("?")[0];
+    // Method 1: batchexecute API
+    try {
+      const pageRes = await fetch(articleUrl, {
+        headers: GNEWS_HEADERS,
+        signal: AbortSignal.timeout(12000),
+      });
+      if (pageRes.ok) {
+        const html = await pageRes.text();
+        const root = parseHtml(html);
 
-      if (sg && ts && articleId) {
-        const body = `f.req=${encodeURIComponent(
-          JSON.stringify([
-            [["Fbv4je", `["garturlreq",[[["zh-TW","TW",["FINANCE_TOP_INDICES","WEB_TEST_1_0_0"]],null,null,null,1],null,[1,1,0],[["","en-US:en","${"TW"}:zh-Hant",1]],null,null,null,0],"${articleId}","${ts}","${sg}",0,0,null,0]`, null, "generic"]],
-          ])
-        )}`;
-
-        const apiRes = await fetch(
-          "https://news.google.com/_/DotsSplashUi/data/batchexecute",
-          {
-            method: "POST",
-            headers: {
-              ...GNEWS_HEADERS,
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body,
-          }
-        );
-
-        const text = await apiRes.text();
-        const match = text.match(/"(https?:\/\/[^"]+)"/);
-        if (match) {
-          const url = match[1].replace(/\\u003d/g, "=").replace(/\\u0026/g, "&");
-          if (!url.includes("news.google.com")) return url;
+        let signature: string | null = null;
+        let timestamp: string | null = null;
+        for (const el of root.querySelectorAll("[data-n-a-sg]")) {
+          const sg = el.getAttribute("data-n-a-sg");
+          const ts = el.getAttribute("data-n-a-ts");
+          if (sg && ts) { signature = sg; timestamp = ts; break; }
         }
+
+        if (signature && timestamp) {
+          const payload = [
+            "Fbv4je",
+            `["garturlreq",[["X","X",["X","X"],null,null,1,1,"US:en",null,1,null,null,null,null,null,0,1],"X","X",1,[1,1,1],1,1,null,0,0,null,0],"${base64}",${timestamp},"${signature}"]`,
+          ];
+          const reqData = `f.req=${encodeURIComponent(JSON.stringify([[payload]]))}`;
+
+          const decodeRes = await fetch(
+            "https://news.google.com/_/DotsSplashUi/data/batchexecute",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+                "User-Agent": GNEWS_HEADERS["User-Agent"] as string,
+                "Origin": "https://news.google.com",
+                "Referer": "https://news.google.com/",
+              },
+              body: reqData,
+              signal: AbortSignal.timeout(12000),
+            }
+          );
+          if (decodeRes.ok) {
+            const text = await decodeRes.text();
+            const parts = text.split("\n\n");
+            if (parts.length >= 2) {
+              const parsed = JSON.parse(parts[1]);
+              const inner = JSON.parse(parsed[0][2]);
+              const resolved = inner[1] as string | null;
+              if (resolved && !resolved.includes("news.google.com")) return resolved;
+            }
+          }
+        }
+
+        // Method 2: canonical or first external link
+        const canonical = html.match(/<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i)?.[1];
+        if (canonical && !canonical.includes("news.google.com")) return canonical;
+
+        const externalLink = html.match(/href="(https?:\/\/(?!(?:www\.)?(?:news\.)?google\.com)[^"]+)"/)?.[1];
+        if (externalLink) return externalLink;
       }
+    } catch {
+      // fall through to Method 3
     }
 
-    // Method 2: canonical / first external link
-    const canonical = root.querySelector('link[rel="canonical"]')?.getAttribute("href");
-    if (canonical && !canonical.includes("news.google.com")) return canonical;
-
-    const links = root.querySelectorAll("a[href]");
-    for (const a of links) {
-      const href = a.getAttribute("href") ?? "";
-      if (href.startsWith("http") && !href.includes("news.google.com")) {
-        return href;
-      }
+    // Method 3: follow redirect from RSS link
+    try {
+      const redirectRes = await fetch(gnewsUrl, {
+        headers: GNEWS_HEADERS,
+        redirect: "follow",
+        signal: AbortSignal.timeout(12000),
+      });
+      const finalUrl = redirectRes.url;
+      if (finalUrl && !finalUrl.includes("news.google.com")) return finalUrl;
+    } catch {
+      // all methods exhausted
     }
-  } catch {
-    // fall through
-  }
 
-  // Method 3: follow redirect
-  try {
-    const res = await fetch(gnewsUrl, { redirect: "follow", headers: GNEWS_HEADERS });
-    if (!res.url.includes("news.google.com")) return res.url;
+    return null;
   } catch {
-    // fall through
+    return null;
   }
-
-  return gnewsUrl;
 }
 
 // ─── 爬取文章內文 ─────────────────────────────────────────────────────────────
@@ -353,6 +369,7 @@ async function runFetchNews() {
     try {
       // resolveUrl
       const realUrl = await resolveUrl(item.link);
+      if (!realUrl) { log(`跳過(無法解碼URL): ${item.title.slice(0,30)}`); continue; }
       log(`resolveUrl: ${realUrl.slice(0, 80)}`);
       if (skipUrls.has(realUrl)) { log("跳過(已抓)"); continue; }
 
