@@ -22,19 +22,11 @@ import { getPrompts } from "@/lib/get-prompts";
 
 // ─── 設定 ────────────────────────────────────────────────────────────────────
 
-// Yahoo 專屬 RSS（直接用 Yahoo 自己的 feed，不走 Google News，避免 429）
+// Yahoo 專屬 RSS（Google News site: 搜尋，鎖定 Yahoo 來源的房地產文章）
 const YAHOO_RSS_URLS = [
-  "https://tw.news.yahoo.com/rss/",           // Yahoo 新聞（台灣）
-  "https://tw.stock.yahoo.com/rss/news",      // Yahoo 股市新聞
-];
-
-// Yahoo 房地產相關關鍵字（用於標題過濾）
-const REAL_ESTATE_KEYWORDS = [
-  "房地產", "房市", "房價", "房屋", "房貸", "購屋", "買房", "賣房",
-  "預售屋", "新成屋", "中古屋", "租屋", "租金", "租賃",
-  "囤房", "房地合一", "實坪", "建案", "建商", "地段", "地價",
-  "坪數", "容積", "都更", "捷運宅", "豪宅", "住宅", "公寓", "大樓",
-  "不動產", "土地", "法拍", "信義", "永慶", "大安", "內湖", "板橋",
+  "https://news.google.com/rss/search?q=site:tw.news.yahoo.com+%E6%88%BF%E5%9C%B0%E7%94%A2+OR+%E6%88%BF%E5%83%B7+OR+%E8%B3%BC%E5%B1%8B&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  "https://news.google.com/rss/search?q=site:tw.news.yahoo.com+%E9%A0%90%E5%94%AE%E5%B1%8B+OR+%E7%A7%9F%E5%B1%8B+OR+%E5%BB%BA%E5%95%86&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  "https://news.google.com/rss/search?q=site:tw.stock.yahoo.com+%E6%88%BF%E5%9C%B0%E7%94%A2+OR+%E6%88%BF%E5%83%B7+OR+%E4%B8%8D%E5%8B%95%E7%94%A2&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
 ];
 
 // 多個關鍵字 RSS 來源：涵蓋房地產各面向
@@ -514,13 +506,8 @@ async function runFetchNews(limit = MAX_PER_RUN, yahooOnly = false) {
   const allItems = await fetchRss(rssUrls);
   log(`RSS: ${allItems.length} 篇`);
 
-  // 2. 過濾聚合器（Yahoo 模式：link 已是真實 URL，無需過濾聚合器）
-  const filtered = yahooOnly
-    ? allItems.filter((it) => {
-        // 關鍵字過濾：只留房地產相關標題
-        return REAL_ESTATE_KEYWORDS.some((kw) => it.title.includes(kw));
-      })
-    : allItems.filter((it) => !isBlocked(it.link));
+  // 2. 過濾（Yahoo 模式：已用 tag RSS 鎖定房地產類別，只過濾封鎖域名）
+  const filtered = allItems.filter((it) => !isBlocked(it.link));
   log(`過濾後: ${filtered.length} 篇`);
 
   // 3. 去重
@@ -544,11 +531,14 @@ async function runFetchNews(limit = MAX_PER_RUN, yahooOnly = false) {
       let finalUrl: string;
 
       if (yahooOnly) {
-        // Yahoo 模式：link 已是真實 Yahoo URL，直接使用
-        if (isBlocked(item.link)) { log(`跳過(封鎖域名): ${item.link.slice(0, 60)}`); continue; }
-        if (skipUrls.has(item.link)) { log("跳過(已抓)"); continue; }
-        finalUrl = item.link;
-        log(`Yahoo URL: ${finalUrl.slice(0, 80)}`);
+        // Yahoo 模式：走 Google News site: RSS，需要解碼，但加延遲避免 429
+        await new Promise((r) => setTimeout(r, 1500)); // 每篇間隔 1.5s
+        const realUrl = await resolveUrl(item.link, log);
+        log(`resolveUrl: ${realUrl ? realUrl.slice(0, 80) : "失敗"}`);
+        if (!realUrl) { log("跳過(無法解碼URL)"); continue; }
+        if (isBlocked(realUrl)) { log(`跳過(解碼後封鎖域名): ${realUrl.slice(0, 60)}`); continue; }
+        if (skipUrls.has(realUrl)) { log("跳過(已抓)"); continue; }
+        finalUrl = realUrl;
       } else {
         // 一般模式：需要透過 Google News 解碼真實 URL
         const realUrl = await resolveUrl(item.link, log);
