@@ -19,8 +19,25 @@ import { getPrompts } from "@/lib/get-prompts";
 
 // ─── 設定 ────────────────────────────────────────────────────────────────────
 
-const RSS_URL =
-  "https://news.google.com/rss/search?q=%E5%8F%B0%E7%81%A3+%E6%88%BF%E5%9C%B0%E7%94%A2&hl=zh-TW&gl=TW&ceid=TW:zh-Hant";
+// 多個關鍵字 RSS 來源：涵蓋房地產各面向
+const RSS_URLS = [
+  // 房地產 / 房市
+  "https://news.google.com/rss/search?q=%E5%8F%B0%E7%81%A3+%E6%88%BF%E5%9C%B0%E7%94%A2&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  // 房價
+  "https://news.google.com/rss/search?q=%E5%8F%B0%E7%81%A3+%E6%88%BF%E5%83%B7&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  // 買房 / 購屋
+  "https://news.google.com/rss/search?q=%E5%8F%B0%E7%81%A3+%E8%B3%BC%E5%B1%8B&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  // 租屋 / 租金
+  "https://news.google.com/rss/search?q=%E5%8F%B0%E7%81%A3+%E7%A7%9F%E5%B1%8B&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  // 預售屋
+  "https://news.google.com/rss/search?q=%E9%A0%90%E5%94%AE%E5%B1%8B&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  // 囤房稅 / 房地合一
+  "https://news.google.com/rss/search?q=%E5%9B%A4%E6%88%BF%E7%A8%85+OR+%E6%88%BF%E5%9C%B0%E5%90%88%E4%B8%80&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  // 建商 / 建案
+  "https://news.google.com/rss/search?q=%E5%8F%B0%E7%81%A3+%E5%BB%BA%E5%95%86+%E5%BB%BA%E6%A1%88&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  // 土地
+  "https://news.google.com/rss/search?q=%E5%8F%B0%E7%81%A3+%E5%9C%B0%E5%83%B7+%E5%9C%B0%E6%AE%B5&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+];
 
 const GNEWS_HEADERS: Record<string, string> = {
   "User-Agent":
@@ -52,14 +69,8 @@ interface RssItem {
 
 // ─── RSS 解析 ─────────────────────────────────────────────────────────────────
 
-async function fetchRss(): Promise<RssItem[]> {
-  const res = await fetch(RSS_URL, { headers: GNEWS_HEADERS });
-  const xml = await res.text();
-
-  // node-html-parser 把 <link> 當 HTML void element，.text 永遠空白
-  // 改用 regex 直接切割 <item>...</item> 區塊再解析
+function parseRssXml(xml: string): RssItem[] {
   const itemBlocks = xml.match(/<item>([\s\S]*?)<\/item>/g) ?? [];
-
   return itemBlocks.map((block) => {
     const get = (tag: string) =>
       block.match(new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`))?.[1]?.trim() ??
@@ -70,18 +81,35 @@ async function fetchRss(): Promise<RssItem[]> {
     const source =
       block.match(/<source[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/source>/)?.[1]?.trim() ?? sourceUrl;
 
-    // description 裡有 HTML，只取純文字
-    const rawDesc = get("description");
-    const description = rawDesc.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
-
     return {
       title: get("title"),
       link,
       pubDate: get("pubDate"),
       source,
-      description,
     };
   }).filter((it) => it.link.startsWith("http"));
+}
+
+async function fetchRss(): Promise<RssItem[]> {
+  const results = await Promise.allSettled(
+    RSS_URLS.map((url) =>
+      fetch(url, { headers: GNEWS_HEADERS }).then((r) => r.text()).then(parseRssXml)
+    )
+  );
+
+  const all: RssItem[] = [];
+  const seen = new Set<string>();
+  for (const r of results) {
+    if (r.status === "fulfilled") {
+      for (const item of r.value) {
+        if (!seen.has(item.link)) {
+          seen.add(item.link);
+          all.push(item);
+        }
+      }
+    }
+  }
+  return all;
 }
 
 function isBlocked(url: string): boolean {
@@ -376,21 +404,15 @@ async function runFetchNews() {
       // resolveUrl
       const realUrl = await resolveUrl(item.link);
       log(`resolveUrl: ${realUrl ? realUrl.slice(0, 80) : "失敗"}`);
-      if (realUrl && skipUrls.has(realUrl)) { log("跳過(已抓)"); continue; }
+      if (!realUrl) { log("跳過(無法解碼URL)"); continue; }
+      if (skipUrls.has(realUrl)) { log("跳過(已抓)"); continue; }
 
-      // 爬取內文；resolveUrl 失敗或內文太短時，fallback 用 RSS description
-      let articleText = "";
-      if (realUrl) {
-        articleText = await fetchArticleText(realUrl);
-        log(`內文長度: ${articleText.length}`);
-      }
-      if (articleText.length < 100 && item.description && item.description.length > 30) {
-        articleText = `${item.title}\n\n${item.description}`;
-        log(`使用RSS description fallback (${articleText.length}字)`);
-      }
-      if (articleText.length < 50) { log("跳過(內文太短且無description)"); continue; }
+      // 爬取全文（沒有全文就跳過）
+      const articleText = await fetchArticleText(realUrl);
+      log(`內文長度: ${articleText.length}`);
+      if (articleText.length < 100) { log("跳過(內文太短，可能有防爬蟲)"); continue; }
 
-      const finalUrl = realUrl ?? item.link;
+      const finalUrl = realUrl;
 
       // AI 改寫
       const result = await translateArticle(item.title, finalUrl, articleText);
