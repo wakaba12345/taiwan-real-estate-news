@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Article {
   slug: string;
@@ -31,6 +31,53 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
   const [triggering, setTriggering] = useState(false);
   const [msg, setMsg] = useState("");
   const [debugLog, setDebugLog] = useState<string[]>([]);
+
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
+  const [rewritePrompt, setRewritePrompt] = useState("");
+  const [promptLoaded, setPromptLoaded] = useState(false);
+  const [promptSaving, setPromptSaving] = useState(false);
+  const [promptSaved, setPromptSaved] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/news-prompt")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.rewrite) {
+          setRewritePrompt(d.rewrite);
+          setPromptLoaded(true);
+        } else {
+          // No custom prompt saved yet — load the built-in default
+          fetch("/api/admin/rewrite-prompt-default")
+            .then((r) => r.json())
+            .then((dd) => {
+              setRewritePrompt(dd.prompt ?? "");
+              setPromptLoaded(true);
+            })
+            .catch(() => setPromptLoaded(true));
+        }
+      })
+      .catch(() => setPromptLoaded(true));
+  }, []);
+
+  async function saveRewritePrompt() {
+    setPromptSaving(true);
+    await fetch("/api/admin/news-prompt", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rewrite: rewritePrompt }),
+    });
+    setPromptSaving(false);
+    setPromptSaved(true);
+    setTimeout(() => setPromptSaved(false), 2000);
+  }
+
+  async function resetRewritePrompt() {
+    const res = await fetch("/api/admin/rewrite-prompt-default");
+    if (res.ok) {
+      const d = await res.json();
+      setRewritePrompt(d.prompt);
+    }
+  }
 
   async function triggerFetch(limit?: number, yahooOnly?: boolean) {
     setTriggering(true);
@@ -183,6 +230,46 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* 改寫 Prompt 設定 */}
+      <div className="mb-10">
+        <button
+          onClick={() => setShowPromptEditor((v) => !v)}
+          className="flex items-center gap-2 text-base font-semibold text-gray-700 hover:text-gray-900 mb-4"
+        >
+          <span>{showPromptEditor ? "▾" : "▸"}</span>
+          AI 改寫 Prompt 設定
+        </button>
+        {showPromptEditor && (
+          <div className="border rounded-lg overflow-hidden">
+            <div className="bg-gray-50 border-b px-4 py-2 flex items-center justify-between text-sm text-gray-500">
+              <span>修改後點「儲存」，下次改寫即生效</span>
+              <button
+                onClick={resetRewritePrompt}
+                className="text-xs text-gray-400 hover:text-gray-600 underline"
+              >
+                還原預設
+              </button>
+            </div>
+            <textarea
+              value={promptLoaded ? rewritePrompt : "載入中..."}
+              onChange={(e) => setRewritePrompt(e.target.value)}
+              disabled={!promptLoaded}
+              rows={22}
+              className="w-full p-4 text-sm font-mono focus:outline-none resize-y disabled:bg-gray-50 disabled:text-gray-400"
+            />
+            <div className="bg-gray-50 border-t px-4 py-2 flex items-center gap-3">
+              <button
+                onClick={saveRewritePrompt}
+                disabled={promptSaving || !promptLoaded}
+                className="bg-indigo-600 text-white px-5 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium"
+              >
+                {promptSaved ? "✓ 已儲存" : promptSaving ? "儲存中..." : "儲存 Prompt"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 執行記錄 */}

@@ -143,9 +143,12 @@ export default function EditNewsPage() {
 
   // 將 markdown / 純文字轉成排版好的 HTML
   function renderBodyHtml(text: string): string {
-    // 若含 HTML tag，先清掉再轉 markdown
+    // 若已是 HTML，直接套用樣式包裝
     if (/<[a-z][\s\S]*>/i.test(text)) {
-      text = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      return `<div style="font-family:'Noto Sans TC',sans-serif;font-size:15px;line-height:1.95;color:#2d2d2d"
+        class="[&_h2]:font-extrabold [&_h2]:text-[1.05rem] [&_h2]:text-[#1e1b4b] [&_h2]:mt-8 [&_h2]:mb-3
+               [&_p]:mb-5 [&_p]:leading-[1.95] [&_strong]:font-bold"
+      >${text}</div>`;
     }
 
     const lines = text.split("\n");
