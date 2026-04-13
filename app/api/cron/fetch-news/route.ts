@@ -50,8 +50,13 @@ const GNEWS_HEADERS: Record<string, string> = {
 };
 
 const BLOCKED = [
-  "udn.com",       // 聯合報 / 經濟日報（含 house.udn.com / money.udn.com）
-  "ctee.com.tw",   // 工商時報（反爬蟲封鎖）
+  "udn.com",                  // 聯合報 / 經濟日報（含 house.udn.com / money.udn.com）
+  "ctee.com.tw",              // 工商時報（反爬蟲封鎖）
+  "twhg.com.tw",              // 台灣好省（JS 渲染，永遠 33 字）
+  "farglory-realty.com.tw",   // 遠雄房地產（JS 渲染，永遠 44 字）
+  "businessweekly.com.tw",    // 商業周刊（JS 渲染，永遠 28 字）
+  "cw.com.tw",                // 天下雜誌（JS 渲染，0 字）
+  "tw.stock.yahoo.com",       // Yahoo 股市（JS 渲染，2 字）
   "yam.com",
   "kimo.com",
   "msn.com",
@@ -498,14 +503,15 @@ async function runFetchNews(limit = MAX_PER_RUN) {
     return { saved: 0, articles: [], debug: debugLog };
   }
 
-  // 4. 限制每次處理篇數，避免 504
-  const toProcess = deduped.slice(0, limit);
-  log(`準備處理 ${toProcess.length} 篇（共 ${deduped.length} 篇待處理，每次上限 ${MAX_PER_RUN}）`);
+  // 4. 候選池放大 5 倍，掃到足夠成功篇數就停止
+  const candidates = deduped.slice(0, limit * 5);
+  log(`候選 ${candidates.length} 篇（共 ${deduped.length} 篇，目標儲存 ${limit} 篇）`);
 
   // 5. 逐篇處理
   const saved: { title: string; slug: string }[] = [];
 
-  for (const item of toProcess) {
+  for (const item of candidates) {
+    if (saved.length >= limit) break;
     try {
       // resolveUrl
       const realUrl = await resolveUrl(item.link, log);
