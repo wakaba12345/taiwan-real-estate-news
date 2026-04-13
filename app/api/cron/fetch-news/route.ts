@@ -47,8 +47,6 @@ const GNEWS_HEADERS: Record<string, string> = {
 };
 
 const BLOCKED = [
-  "yahoo.com",
-  "yahoo.com.tw",
   "yam.com",
   "kimo.com",
   "msn.com",
@@ -121,32 +119,57 @@ function isBlocked(url: string): boolean {
   }
 }
 
-// ─── Google News URL 解碼 (三段 fallback) ────────────────────────────────────
+// ─── Google News URL 解碼 ─────────────────────────────────────────────────────
 
-async function resolveUrl(gnewsUrl: string): Promise<string | null> {
+// Google 同意 cookie，略過 GDPR 同意頁
+const GNEWS_COOKIES = "CONSENT=YES+cb.20230629-07-p1.zh-TW+FX+119; SOCS=CAESEwgDEgk0MDc3MDEQ2A==";
+
+function isExternalUrl(url: string): boolean {
+  try {
+    const h = new URL(url).hostname;
+    return !h.includes("google.com") && !h.includes("gstatic.com") && !h.includes("googleapis.com");
+  } catch { return false; }
+}
+
+// 遞迴掃描 JSON 結構，找第一個非 Google 的 http URL
+function scanForUrl(obj: unknown): string | null {
+  if (typeof obj === "string" && obj.startsWith("http") && isExternalUrl(obj)) return obj;
+  if (Array.isArray(obj)) {
+    for (const x of obj) { const r = scanForUrl(x); if (r) return r; }
+  }
+  return null;
+}
+
+async function resolveUrl(gnewsUrl: string, log?: (msg: string) => void): Promise<string | null> {
+  const dbg = (msg: string) => { console.log("[resolve]", msg); log?.(`  [resolve] ${msg}`); };
+
   try {
     const base64 = new URL(gnewsUrl).pathname.split("/").pop();
-    if (!base64) return null;
+    if (!base64) { dbg("no base64"); return null; }
+    dbg(`id: ${base64.slice(0, 24)}…`);
 
     const articleUrl = `https://news.google.com/articles/${base64}`;
+    const commonHeaders = {
+      ...GNEWS_HEADERS,
+      "Cookie": GNEWS_COOKIES,
+    };
 
-    // Method 1: batchexecute API
+    // ── Method 1: batchexecute ──────────────────────────────────────────────
     try {
       const pageRes = await fetch(articleUrl, {
-        headers: GNEWS_HEADERS,
-        signal: AbortSignal.timeout(12000),
+        headers: commonHeaders,
+        signal: AbortSignal.timeout(15000),
       });
+      dbg(`page ${pageRes.status}`);
+
       if (pageRes.ok) {
         const html = await pageRes.text();
-        const root = parseHtml(html);
+        dbg(`html ${html.length} chars`);
 
-        let signature: string | null = null;
-        let timestamp: string | null = null;
-        for (const el of root.querySelectorAll("[data-n-a-sg]")) {
-          const sg = el.getAttribute("data-n-a-sg");
-          const ts = el.getAttribute("data-n-a-ts");
-          if (sg && ts) { signature = sg; timestamp = ts; break; }
-        }
+        // regex 抓 signature / timestamp（比 querySelectorAll 更可靠）
+        const signature = html.match(/data-n-a-sg="([^"]+)"/)?.[1];
+        const timestamp  = html.match(/data-n-a-ts="([^"]+)"/)?.[1];
+        dbg(`sig=${signature ? "✓" : "✗"} ts=${timestamp ? "✓" : "✗"}`);
 
         if (signature && timestamp) {
           const payload = [
@@ -155,58 +178,95 @@ async function resolveUrl(gnewsUrl: string): Promise<string | null> {
           ];
           const reqData = `f.req=${encodeURIComponent(JSON.stringify([[payload]]))}`;
 
-          const decodeRes = await fetch(
+          const batchRes = await fetch(
             "https://news.google.com/_/DotsSplashUi/data/batchexecute",
             {
               method: "POST",
               headers: {
                 "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-                "User-Agent": GNEWS_HEADERS["User-Agent"] as string,
+                "User-Agent": GNEWS_HEADERS["User-Agent"],
                 "Origin": "https://news.google.com",
-                "Referer": "https://news.google.com/",
+                "Referer": articleUrl,
+                "Cookie": GNEWS_COOKIES,
               },
               body: reqData,
-              signal: AbortSignal.timeout(12000),
+              signal: AbortSignal.timeout(15000),
             }
           );
-          if (decodeRes.ok) {
-            const text = await decodeRes.text();
-            const parts = text.split("\n\n");
-            if (parts.length >= 2) {
-              const parsed = JSON.parse(parts[1]);
-              const inner = JSON.parse(parsed[0][2]);
-              const resolved = inner[1] as string | null;
-              if (resolved && !resolved.includes("news.google.com")) return resolved;
+          dbg(`batch ${batchRes.status}`);
+
+          if (batchRes.ok) {
+            const text = await batchRes.text();
+            dbg(`batch body ${text.length} chars: ${text.slice(0, 80).replace(/\n/g, "\\n")}`);
+
+            // 嘗試解析每段 JSON（Google 回應格式：")]}'\n\n[...]"）
+            for (const part of text.split("\n\n")) {
+              try {
+                const parsed = JSON.parse(part);
+                if (!Array.isArray(parsed)) continue;
+                for (const item of parsed) {
+                  if (!Array.isArray(item) || typeof item[2] !== "string") continue;
+                  try {
+                    const inner = JSON.parse(item[2]);
+                    const found = scanForUrl(inner);
+                    if (found) { dbg(`batch ok: ${found.slice(0, 60)}`); return found; }
+                  } catch { /* continue */ }
+                }
+              } catch { /* continue */ }
             }
+            dbg("batch: no URL in response");
           }
         }
 
-        // Method 2: canonical or first external link
-        const canonical = html.match(/<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i)?.[1];
-        if (canonical && !canonical.includes("news.google.com")) return canonical;
+        // ── Method 2: HTML 掃描 ──────────────────────────────────────────────
+        // canonical link
+        const canonical =
+          html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)?.[1] ??
+          html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["']/i)?.[1];
+        if (canonical && isExternalUrl(canonical)) { dbg(`canonical: ${canonical.slice(0, 60)}`); return canonical; }
 
-        const externalLink = html.match(/href="(https?:\/\/(?!(?:www\.)?(?:news\.)?google\.com)[^"]+)"/)?.[1];
-        if (externalLink) return externalLink;
+        // data-url attribute
+        const dataUrl = html.match(/data-url="(https?:\/\/[^"]+)"/)?.[1];
+        if (dataUrl && isExternalUrl(dataUrl)) { dbg(`data-url: ${dataUrl.slice(0, 60)}`); return dataUrl; }
+
+        // 找所有 href 外部連結
+        for (const m of html.matchAll(/href="(https?:\/\/[^"]+)"/g)) {
+          if (isExternalUrl(m[1])) { dbg(`href: ${m[1].slice(0, 60)}`); return m[1]; }
+        }
+        dbg("no URL in HTML");
       }
-    } catch {
-      // fall through to Method 3
+    } catch (e) {
+      dbg(`method1 err: ${e}`);
     }
 
-    // Method 3: follow redirect from RSS link
+    // ── Method 3: HTTP redirect (manual → follow) ───────────────────────────
     try {
-      const redirectRes = await fetch(gnewsUrl, {
-        headers: GNEWS_HEADERS,
+      // 先看 Location header
+      const manualRes = await fetch(gnewsUrl, {
+        headers: commonHeaders,
+        redirect: "manual",
+        signal: AbortSignal.timeout(12000),
+      });
+      const loc = manualRes.headers.get("location");
+      dbg(`manual redirect: ${loc ?? "none"}`);
+      if (loc && isExternalUrl(loc)) return loc;
+
+      // 再 follow redirect
+      const followRes = await fetch(gnewsUrl, {
+        headers: commonHeaders,
         redirect: "follow",
         signal: AbortSignal.timeout(12000),
       });
-      const finalUrl = redirectRes.url;
-      if (finalUrl && !finalUrl.includes("news.google.com")) return finalUrl;
-    } catch {
-      // all methods exhausted
+      dbg(`follow redirect: ${followRes.url.slice(0, 60)}`);
+      if (isExternalUrl(followRes.url)) return followRes.url;
+    } catch (e) {
+      dbg(`method3 err: ${e}`);
     }
 
+    dbg("all methods failed");
     return null;
-  } catch {
+  } catch (e) {
+    console.error("resolveUrl fatal:", e);
     return null;
   }
 }
@@ -393,7 +453,7 @@ async function runFetchNews() {
   for (const item of deduped) {
     try {
       // resolveUrl
-      const realUrl = await resolveUrl(item.link);
+      const realUrl = await resolveUrl(item.link, log);
       log(`resolveUrl: ${realUrl ? realUrl.slice(0, 80) : "失敗"}`);
       if (!realUrl) { log("跳過(無法解碼URL)"); continue; }
       if (skipUrls.has(realUrl)) { log("跳過(已抓)"); continue; }
