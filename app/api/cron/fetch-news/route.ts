@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+
+// 讓 Vercel 在 Pro/Fluid 計畫下可執行最長 300 秒
+export const maxDuration = 300;
 import Anthropic from "@anthropic-ai/sdk";
 import { Resend } from "resend";
 import { parse as parseHtml } from "node-html-parser";
