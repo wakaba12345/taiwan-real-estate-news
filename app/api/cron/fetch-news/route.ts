@@ -549,9 +549,11 @@ async function runFetchNews(limit = MAX_PER_RUN) {
     }
   }
 
-  // 7. 寄 email
+  // 7. 寄 email（失敗不影響主流程）
   if (saved.length > 0 && settings.alertEmail) {
-    await sendSummaryEmail(settings.alertEmail, saved, domain);
+    try { await sendSummaryEmail(settings.alertEmail, saved, domain); } catch (e) {
+      log(`Email 寄送失敗（不影響結果）：${e}`);
+    }
   }
 
   log(`完成，儲存 ${saved.length} 篇`);
