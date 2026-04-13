@@ -59,6 +59,10 @@ const BLOCKED = [
 
 const MODEL = "claude-haiku-4-5-20251001";
 
+// 每次最多處理幾篇（避免 Vercel 504）
+// 每篇最多 ~25s（resolve+爬文+AI），8篇 ≈ 200s < 300s maxDuration
+const MAX_PER_RUN = 8;
+
 // ─── 型別 ────────────────────────────────────────────────────────────────────
 
 interface RssItem {
@@ -162,7 +166,7 @@ async function resolveUrl(gnewsUrl: string, log?: (msg: string) => void): Promis
     try {
       const pageRes = await fetch(articleUrl, {
         headers: commonHeaders,
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(8000),
       });
       dbg(`page ${pageRes.status}`);
 
@@ -194,7 +198,7 @@ async function resolveUrl(gnewsUrl: string, log?: (msg: string) => void): Promis
                 "Cookie": GNEWS_COOKIES,
               },
               body: reqData,
-              signal: AbortSignal.timeout(15000),
+              signal: AbortSignal.timeout(8000),
             }
           );
           dbg(`batch ${batchRes.status}`);
@@ -249,7 +253,7 @@ async function resolveUrl(gnewsUrl: string, log?: (msg: string) => void): Promis
       const manualRes = await fetch(gnewsUrl, {
         headers: commonHeaders,
         redirect: "manual",
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(7000),
       });
       const loc = manualRes.headers.get("location");
       dbg(`manual redirect: ${loc ?? "none"}`);
@@ -259,7 +263,7 @@ async function resolveUrl(gnewsUrl: string, log?: (msg: string) => void): Promis
       const followRes = await fetch(gnewsUrl, {
         headers: commonHeaders,
         redirect: "follow",
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(7000),
       });
       dbg(`follow redirect: ${followRes.url.slice(0, 60)}`);
       if (isExternalUrl(followRes.url)) return followRes.url;
@@ -281,7 +285,7 @@ async function fetchArticleText(url: string): Promise<string> {
   try {
     const res = await fetch(url, {
       headers: GNEWS_HEADERS,
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(8000),
     });
     const html = await res.text();
     const root = parseHtml(html);
@@ -493,13 +497,14 @@ async function runFetchNews() {
     return { saved: 0, articles: [], debug: debugLog };
   }
 
-  // 4. 全部處理（不 AI 篩選）
-  log(`準備處理 ${deduped.length} 篇`);
+  // 4. 限制每次處理篇數，避免 504
+  const toProcess = deduped.slice(0, MAX_PER_RUN);
+  log(`準備處理 ${toProcess.length} 篇（共 ${deduped.length} 篇待處理，每次上限 ${MAX_PER_RUN}）`);
 
   // 5. 逐篇處理
   const saved: { title: string; slug: string }[] = [];
 
-  for (const item of deduped) {
+  for (const item of toProcess) {
     try {
       // resolveUrl
       const realUrl = await resolveUrl(item.link, log);
