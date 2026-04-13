@@ -305,12 +305,17 @@ async function fetchArticleText(url: string): Promise<string> {
 
 // ─── AI 函式 ──────────────────────────────────────────────────────────────────
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+// 在函數內建立，避免 env var 未設定時造成模組初始化錯誤
+function getAnthropic() {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error("ANTHROPIC_API_KEY 環境變數未設定");
+  return new Anthropic({ apiKey: key });
+}
 
 async function filterNews(items: RssItem[]): Promise<number[]> {
   const prompts = await getPrompts();
   const numbered = items.map((it, i) => `${i + 1}. ${it.title}`).join("\n");
-  const msg = await anthropic.messages.create({
+  const msg = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 512,
     messages: [
@@ -333,7 +338,7 @@ async function translateTitles(
 ): Promise<Record<string, string>> {
   const prompts = await getPrompts();
   const titlesJson = JSON.stringify(items.map((it) => it.title));
-  const msg = await anthropic.messages.create({
+  const msg = await getAnthropic().messages.create({
     model: MODEL,
     max_tokens: 2048,
     messages: [
@@ -359,7 +364,7 @@ async function translateArticle(
 ): Promise<{ title: string; body: string } | null> {
   try {
     const prompts = await getPrompts();
-    const msg = await anthropic.messages.create({
+    const msg = await getAnthropic().messages.create({
       model: MODEL,
       max_tokens: 4096,
       messages: [
