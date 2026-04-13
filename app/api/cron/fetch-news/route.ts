@@ -285,19 +285,59 @@ async function fetchArticleText(url: string): Promise<string> {
     const html = await res.text();
     const root = parseHtml(html);
 
-    // 移除 script / style / nav / header / footer
-    for (const el of root.querySelectorAll("script,style,nav,header,footer,aside")) {
-      el.remove();
+    // 移除所有非內容元素（含 noscript 追蹤 pixel）
+    const junkSelectors = [
+      "script", "style", "noscript", "iframe", "frame",
+      "nav", "header", "footer", "aside",
+      "figure", "form", "button", "input", "select", "textarea",
+      '[class*="ad-"]', '[class*="-ad"]', '[id*="google_ad"]',
+      '[class*="track"]', '[class*="pixel"]', '[class*="analytics"]',
+      '[class*="social"]', '[class*="share"]', '[class*="comment"]',
+      '[class*="relat"]', '[class*="recommend"]', '[class*="sidebar"]',
+      '[class*="banner"]', '[class*="popup"]', '[class*="cookie"]',
+      '[class*="newsletter"]', '[class*="subscribe"]', '[class*="modal"]',
+    ];
+    for (const sel of junkSelectors) {
+      try {
+        for (const el of root.querySelectorAll(sel)) el.remove();
+      } catch { /* 部分 selector 不支援，跳過 */ }
     }
 
+    // 找主要內容區（優先順序：article → 各種 content class → main → body）
     const articleEl =
       root.querySelector("article") ??
+      root.querySelector('[class*="article-body"]') ??
+      root.querySelector('[class*="article-content"]') ??
+      root.querySelector('[class*="post-content"]') ??
+      root.querySelector('[class*="entry-content"]') ??
+      root.querySelector('[class*="news-content"]') ??
+      root.querySelector('[class*="story-body"]') ??
       root.querySelector('[class*="article"]') ??
-      root.querySelector('[class*="content"]') ??
       root.querySelector("main") ??
+      root.querySelector('[role="main"]') ??
       root.querySelector("body");
 
-    return (articleEl?.text ?? "").replace(/\s+/g, " ").trim().slice(0, 8000);
+    // 逐段落抽取：只取 p / h1~h4，過濾雜訊短行
+    const paragraphs: string[] = [];
+    for (const p of articleEl?.querySelectorAll("p,h1,h2,h3,h4") ?? []) {
+      const t = p.text.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+      if (t.length < 12) continue;
+      if (/^https?:\/\//i.test(t)) continue; // 純網址行
+      paragraphs.push(t);
+    }
+
+    let result: string;
+    if (paragraphs.length >= 3) {
+      result = paragraphs.join("\n\n");
+    } else {
+      // fallback：直接取 text，並清掉殘留 HTML tag 字串
+      result = (articleEl?.text ?? "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    return result.slice(0, 8000);
   } catch {
     return "";
   }

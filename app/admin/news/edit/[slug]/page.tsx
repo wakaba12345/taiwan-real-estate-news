@@ -141,31 +141,54 @@ export default function EditNewsPage() {
     if (result?.headlines[i]) setEditTitle(result.headlines[i]);
   };
 
-  // 將 markdown / 純文字轉成可渲染的 HTML
+  // 將 markdown / 純文字轉成排版好的 HTML
   function renderBodyHtml(text: string): string {
-    // 若已含 HTML tag，直接回傳
-    if (/<[a-z][\s\S]*>/i.test(text)) return text;
-    // markdown 轉 HTML
+    // 若含 HTML tag，先清掉再轉 markdown
+    if (/<[a-z][\s\S]*>/i.test(text)) {
+      text = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    }
+
     const lines = text.split("\n");
     const parts: string[] = [];
     let buf: string[] = [];
+
+    const escape = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    const inline = (s: string) =>
+      escape(s)
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*(.+?)\*/g, "<em>$1</em>");
+
     const flush = () => {
-      if (buf.length) { parts.push(`<p>${buf.join("<br>")}</p>`); buf = []; }
+      if (buf.length) {
+        parts.push(
+          `<p style="margin:0 0 1.1em;line-height:1.95;font-size:15px;color:#2d2d2d">${buf.join("<br>")}</p>`
+        );
+        buf = [];
+      }
     };
+
     for (const line of lines) {
       if (line.startsWith("## ")) {
         flush();
-        parts.push(`<h3 style="font-weight:700;font-size:1rem;margin:1.2em 0 0.4em;border-left:3px solid #4f46e5;padding-left:8px">${line.slice(3)}</h3>`);
+        parts.push(
+          `<h3 style="font-weight:700;font-size:1.05rem;line-height:1.5;margin:1.8em 0 0.6em;padding:0.3em 0 0.3em 12px;border-left:4px solid #4f46e5;background:#f5f3ff;color:#1e1b4b;border-radius:0 4px 4px 0">${inline(line.slice(3))}</h3>`
+        );
+      } else if (line.startsWith("# ")) {
+        flush();
+        parts.push(
+          `<h2 style="font-weight:800;font-size:1.15rem;margin:2em 0 0.6em;color:#1e1b4b">${inline(line.slice(2))}</h2>`
+        );
       } else if (line.trim() === "") {
         flush();
       } else {
-        // **bold**
-        const formatted = line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-        buf.push(formatted);
+        buf.push(inline(line));
       }
     }
     flush();
-    return parts.join("\n");
+
+    return `<div style="font-family:'Noto Sans TC',sans-serif">${parts.join("")}</div>`;
   }
 
   if (loading) return <div className="p-8 text-gray-400">載入中...</div>;
@@ -299,7 +322,7 @@ export default function EditNewsPage() {
               <div className="p-4 max-h-[600px] overflow-y-auto">
                 {hasOriginalBody ? (
                   <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                    {article.original_body}
+                    {(article.original_body ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()}
                   </p>
                 ) : (
                   <p className="text-sm text-gray-400 italic">（無原始內文）</p>
