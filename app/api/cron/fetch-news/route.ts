@@ -510,6 +510,7 @@ async function runFetchNews(limit = MAX_PER_RUN) {
       const realUrl = await resolveUrl(item.link, log);
       log(`resolveUrl: ${realUrl ? realUrl.slice(0, 80) : "失敗"}`);
       if (!realUrl) { log("跳過(無法解碼URL)"); continue; }
+      if (isBlocked(realUrl)) { log(`跳過(解碼後封鎖域名): ${realUrl.slice(0, 60)}`); continue; }
       if (skipUrls.has(realUrl)) { log("跳過(已抓)"); continue; }
 
       // 爬取全文（沒有全文就跳過）
