@@ -50,6 +50,7 @@ const GNEWS_HEADERS: Record<string, string> = {
 };
 
 const BLOCKED = [
+  "udn.com",       // 聯合報 / 經濟日報
   "yam.com",
   "kimo.com",
   "msn.com",
