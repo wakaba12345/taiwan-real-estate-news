@@ -503,15 +503,14 @@ async function runFetchNews(limit = MAX_PER_RUN) {
     return { saved: 0, articles: [], debug: debugLog };
   }
 
-  // 4. 候選池放大 5 倍，掃到足夠成功篇數就停止
-  const candidates = deduped.slice(0, limit * 5);
-  log(`候選 ${candidates.length} 篇（共 ${deduped.length} 篇，目標儲存 ${limit} 篇）`);
+  // 4. 全部掃，只留成功的
+  const candidates = deduped;
+  log(`候選 ${candidates.length} 篇（全部掃，只儲存有全文的）`);
 
   // 5. 逐篇處理
   const saved: { title: string; slug: string }[] = [];
 
   for (const item of candidates) {
-    if (saved.length >= limit) break;
     try {
       // resolveUrl
       const realUrl = await resolveUrl(item.link, log);
