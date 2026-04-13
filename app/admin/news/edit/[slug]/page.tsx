@@ -170,15 +170,19 @@ export default function EditNewsPage() {
     };
 
     for (const line of lines) {
-      if (line.startsWith("## ")) {
+      if (line.startsWith("### ") || line.startsWith("## ")) {
         flush();
+        const text = line.replace(/^#{2,3} /, "");
         parts.push(
-          `<h3 style="font-weight:700;font-size:1.05rem;line-height:1.5;margin:1.8em 0 0.6em;padding:0.3em 0 0.3em 12px;border-left:4px solid #4f46e5;background:#f5f3ff;color:#1e1b4b;border-radius:0 4px 4px 0">${inline(line.slice(3))}</h3>`
+          `<div style="display:flex;align-items:center;gap:8px;margin:2em 0 0.7em">` +
+          `<span style="flex-shrink:0;width:4px;height:1.4em;background:#4f46e5;border-radius:2px;display:inline-block"></span>` +
+          `<h3 style="margin:0;font-weight:800;font-size:1.05rem;color:#1e1b4b;line-height:1.4">${inline(text)}</h3>` +
+          `</div>`
         );
       } else if (line.startsWith("# ")) {
         flush();
         parts.push(
-          `<h2 style="font-weight:800;font-size:1.15rem;margin:2em 0 0.6em;color:#1e1b4b">${inline(line.slice(2))}</h2>`
+          `<h2 style="font-weight:800;font-size:1.2rem;margin:2em 0 0.7em;color:#1e1b4b;border-bottom:2px solid #e0e7ff;padding-bottom:0.3em">${inline(line.slice(2))}</h2>`
         );
       } else if (line.trim() === "") {
         flush();
@@ -322,7 +326,10 @@ export default function EditNewsPage() {
               <div className="p-4 max-h-[600px] overflow-y-auto">
                 {hasOriginalBody ? (
                   <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                    {(article.original_body ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()}
+                    {(article.original_body ?? "")
+                      .replace(/<[^>]+>/g, " ")   // 清掉 HTML tag
+                      .replace(/[ \t]+/g, " ")     // 同行多餘空白合併（保留換行）
+                      .trim()}
                   </p>
                 ) : (
                   <p className="text-sm text-gray-400 italic">（無原始內文）</p>
