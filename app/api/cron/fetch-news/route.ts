@@ -519,7 +519,6 @@ async function runFetchNews(limit = MAX_PER_RUN) {
       if (!realUrl) { log("跳過(無法解碼URL)"); continue; }
       if (isBlocked(realUrl)) {
         log(`跳過(解碼後封鎖域名): ${realUrl.slice(0, 60)}`);
-        await recordFetchHistory(item.link, today); // 記錄，避免重複嘗試
         continue;
       }
       if (skipUrls.has(realUrl)) { log("跳過(已抓)"); continue; }
@@ -527,11 +526,7 @@ async function runFetchNews(limit = MAX_PER_RUN) {
       // 爬取全文（沒有全文就跳過）
       const articleText = await fetchArticleText(realUrl);
       log(`內文長度: ${articleText.length}`);
-      if (articleText.length < 100) {
-        log("跳過(內文太短，可能有防爬蟲)");
-        await recordFetchHistory(item.link, today); // 記錄，避免重複嘗試
-        continue;
-      }
+      if (articleText.length < 100) { log("跳過(內文太短，可能有防爬蟲)"); continue; }
 
       const finalUrl = realUrl;
 
