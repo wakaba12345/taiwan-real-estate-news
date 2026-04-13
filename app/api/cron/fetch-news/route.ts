@@ -519,14 +519,17 @@ async function runFetchNews(limit = MAX_PER_RUN, yahooOnly = false) {
     return { saved: 0, articles: [], debug: debugLog };
   }
 
-  // 4. 全部掃，只留成功的
-  const candidates = deduped;
-  log(`候選 ${candidates.length} 篇（全部掃，只儲存有全文的）`);
+  // 4. 候選數量：Yahoo 模式有延遲，限制篇數避免 504；一般模式全掃
+  const maxCandidates = yahooOnly ? 15 : deduped.length;
+  const maxSaves = yahooOnly ? 5 : deduped.length;
+  const candidates = deduped.slice(0, maxCandidates);
+  log(`候選 ${candidates.length} 篇（Yahoo 模式最多儲存 ${maxSaves} 篇）`);
 
   // 5. 逐篇處理
   const saved: { title: string; slug: string }[] = [];
 
   for (const item of candidates) {
+    if (yahooOnly && saved.length >= maxSaves) break;
     try {
       let finalUrl: string;
 
