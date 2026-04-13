@@ -8,6 +8,7 @@ interface Article {
   original_title: string;
   source: string;
   published_at: string;
+  fetched_at?: string | null;
   created_at?: string;
 }
 
@@ -94,7 +95,8 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
               <tr className="bg-gray-100">
                 <th className="text-left p-3 border">標題</th>
                 <th className="text-left p-3 border w-32">來源</th>
-                <th className="text-left p-3 border w-28">日期</th>
+                <th className="text-left p-3 border w-28">文章日期</th>
+                <th className="text-left p-3 border w-36">抓取時間</th>
                 <th className="text-left p-3 border w-28">操作</th>
               </tr>
             </thead>
@@ -107,6 +109,13 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
                   </td>
                   <td className="p-3 border text-gray-500">{a.source}</td>
                   <td className="p-3 border text-gray-500">{a.published_at}</td>
+                  <td className="p-3 border text-gray-500 text-xs">
+                    {a.fetched_at
+                      ? new Date(a.fetched_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })
+                      : a.created_at
+                      ? new Date(a.created_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })
+                      : "—"}
+                  </td>
                   <td className="p-3 border">
                     <div className="flex gap-2">
                       <a
@@ -130,7 +139,7 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
               ))}
               {articles.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="p-6 text-center text-gray-400">
+                  <td colSpan={5} className="p-6 text-center text-gray-400">
                     尚無新聞，點擊「立即抓取」開始
                   </td>
                 </tr>
