@@ -56,7 +56,6 @@ const BLOCKED = [
   "farglory-realty.com.tw",   // 遠雄房地產（JS 渲染，永遠 44 字）
   "businessweekly.com.tw",    // 商業周刊（JS 渲染，永遠 28 字）
   "cw.com.tw",                // 天下雜誌（JS 渲染，0 字）
-  "tw.stock.yahoo.com",       // Yahoo 股市（JS 渲染，2 字）
   "yam.com",
   "kimo.com",
   "msn.com",
