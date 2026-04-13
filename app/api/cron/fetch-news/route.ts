@@ -375,21 +375,25 @@ async function runFetchNews() {
     try {
       // resolveUrl
       const realUrl = await resolveUrl(item.link);
-      if (!realUrl) { log(`跳過(無法解碼URL): ${item.title.slice(0,30)}`); continue; }
-      log(`resolveUrl: ${realUrl.slice(0, 80)}`);
-      if (skipUrls.has(realUrl)) { log("跳過(已抓)"); continue; }
+      log(`resolveUrl: ${realUrl ? realUrl.slice(0, 80) : "失敗"}`);
+      if (realUrl && skipUrls.has(realUrl)) { log("跳過(已抓)"); continue; }
 
-      // 爬取內文，失敗時 fallback 用 RSS description
-      let articleText = await fetchArticleText(realUrl);
-      log(`內文長度: ${articleText.length}`);
+      // 爬取內文；resolveUrl 失敗或內文太短時，fallback 用 RSS description
+      let articleText = "";
+      if (realUrl) {
+        articleText = await fetchArticleText(realUrl);
+        log(`內文長度: ${articleText.length}`);
+      }
       if (articleText.length < 100 && item.description && item.description.length > 30) {
         articleText = `${item.title}\n\n${item.description}`;
-        log(`使用RSS description作為fallback (${articleText.length}字)`);
+        log(`使用RSS description fallback (${articleText.length}字)`);
       }
       if (articleText.length < 50) { log("跳過(內文太短且無description)"); continue; }
 
+      const finalUrl = realUrl ?? item.link;
+
       // AI 改寫
-      const result = await translateArticle(item.title, realUrl, articleText);
+      const result = await translateArticle(item.title, finalUrl, articleText);
       log(`AI改寫: ${result ? result.title.slice(0, 30) : "失敗(null)"}`);
       if (!result) continue;
 
@@ -400,7 +404,7 @@ async function runFetchNews() {
         slug,
         title: result.title,
         original_title: item.title,
-        original_url: realUrl,
+        original_url: finalUrl,
         published_at: pubDate,
         fetched_at: new Date().toISOString(),
         source: item.source,
@@ -409,7 +413,7 @@ async function runFetchNews() {
       });
 
       await recordFetchHistory(item.link, today);
-      if (realUrl !== item.link) await recordFetchHistory(realUrl, today);
+      if (finalUrl !== item.link) await recordFetchHistory(finalUrl, today);
 
       saved.push({ title: result.title, slug });
     } catch (err) {
