@@ -35,10 +35,20 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
   async function triggerFetch() {
     setTriggering(true);
     setMsg("正在抓取新聞，請稍候...");
+    setDebugLog([]);
     try {
       const res = await fetch("/api/cron/fetch-news", { method: "POST" });
-      const data = await res.json();
-      if (data.debug) setDebugLog(data.debug);
+      const text = await res.text();
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // 伺服器回傳非 JSON（Next.js / Vercel 錯誤頁）
+        setMsg(`❌ 伺服器錯誤 ${res.status}`);
+        setDebugLog([`HTTP ${res.status}`, text.slice(0, 500)]);
+        return;
+      }
+      if (data.debug) setDebugLog(data.debug as string[]);
       if (data.ok) {
         setMsg(`✅ 完成！已儲存 ${data.saved} 篇新聞`);
         const r = await fetch("/api/admin/news");
