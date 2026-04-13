@@ -12,6 +12,7 @@ export interface NewsArticle {
   source: string;
   cover_image: string | null;
   body: string;
+  original_body?: string | null;
   created_at?: string;
 }
 
@@ -27,9 +28,13 @@ export async function initNewsDb() {
       source       TEXT NOT NULL DEFAULT '',
       cover_image  TEXT,
       body         TEXT NOT NULL DEFAULT '',
+      original_body TEXT,
       created_at   TIMESTAMPTZ DEFAULT NOW()
     )
   `;
+
+  // 向後相容：已存在的表補欄位
+  await sql`ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS original_body TEXT`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS news_fetch_history (
@@ -42,7 +47,7 @@ export async function initNewsDb() {
 
 export async function saveNewsArticle(article: Omit<NewsArticle, "created_at">) {
   await sql`
-    INSERT INTO news_articles (slug, title, original_title, original_url, published_at, fetched_at, source, cover_image, body)
+    INSERT INTO news_articles (slug, title, original_title, original_url, published_at, fetched_at, source, cover_image, body, original_body)
     VALUES (
       ${article.slug},
       ${article.title},
@@ -52,11 +57,13 @@ export async function saveNewsArticle(article: Omit<NewsArticle, "created_at">) 
       ${article.fetched_at},
       ${article.source},
       ${article.cover_image ?? null},
-      ${article.body}
+      ${article.body},
+      ${article.original_body ?? null}
     )
     ON CONFLICT (slug) DO UPDATE SET
       title = EXCLUDED.title,
       body = EXCLUDED.body,
+      original_body = COALESCE(EXCLUDED.original_body, news_articles.original_body),
       fetched_at = EXCLUDED.fetched_at,
       cover_image = EXCLUDED.cover_image
   `;

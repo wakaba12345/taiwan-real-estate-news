@@ -104,7 +104,12 @@ export default function NewsClient({ articles: initial, logs: initialLogs }: Pro
               {articles.map((a) => (
                 <tr key={a.slug} className="hover:bg-gray-50">
                   <td className="p-3 border">
-                    <div className="font-medium">{a.title}</div>
+                    <div className="flex items-start gap-2">
+                      <div className="font-medium">{a.title}</div>
+                      {(a.original_title?.includes("獨家") || a.title?.includes("獨家")) && (
+                        <span className="shrink-0 bg-red-600 text-white text-xs font-bold px-1.5 py-0.5 rounded">獨家</span>
+                      )}
+                    </div>
                     <div className="text-xs text-gray-400 mt-1">{a.original_title}</div>
                   </td>
                   <td className="p-3 border text-gray-500">{a.source}</td>

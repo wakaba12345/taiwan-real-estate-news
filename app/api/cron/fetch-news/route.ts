@@ -483,6 +483,7 @@ async function runFetchNews() {
         source: item.source,
         cover_image: null,
         body: result.body,
+        original_body: articleText,
       });
 
       await recordFetchHistory(item.link, today);
