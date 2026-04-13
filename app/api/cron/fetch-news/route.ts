@@ -22,11 +22,11 @@ import { getPrompts } from "@/lib/get-prompts";
 
 // ─── 設定 ────────────────────────────────────────────────────────────────────
 
-// Yahoo 專屬 RSS（Google News site: 搜尋，鎖定 Yahoo 來源的房地產文章）
+// Yahoo 股市專屬 RSS（tw.stock.yahoo.com 可爬全文；tw.news.yahoo.com 是 JS 渲染無法爬）
 const YAHOO_RSS_URLS = [
-  "https://news.google.com/rss/search?q=site:tw.news.yahoo.com+%E6%88%BF%E5%9C%B0%E7%94%A2+OR+%E6%88%BF%E5%83%B7+OR+%E8%B3%BC%E5%B1%8B&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
-  "https://news.google.com/rss/search?q=site:tw.news.yahoo.com+%E9%A0%90%E5%94%AE%E5%B1%8B+OR+%E7%A7%9F%E5%B1%8B+OR+%E5%BB%BA%E5%95%86&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
-  "https://news.google.com/rss/search?q=site:tw.stock.yahoo.com+%E6%88%BF%E5%9C%B0%E7%94%A2+OR+%E6%88%BF%E5%83%B7+OR+%E4%B8%8D%E5%8B%95%E7%94%A2&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  "https://news.google.com/rss/search?q=site:tw.stock.yahoo.com+%E6%88%BF%E5%9C%B0%E7%94%A2&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  "https://news.google.com/rss/search?q=site:tw.stock.yahoo.com+%E6%88%BF%E5%83%B7+OR+%E8%B3%BC%E5%B1%8B&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+  "https://news.google.com/rss/search?q=site:tw.stock.yahoo.com+%E9%A0%90%E5%94%AE%E5%B1%8B+OR+%E7%A7%9F%E5%B1%8B&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
 ];
 
 // 多個關鍵字 RSS 來源：涵蓋房地產各面向
